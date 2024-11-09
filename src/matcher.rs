@@ -41,6 +41,8 @@ pub enum Matcher {
     AnyOf(Vec<Matcher>),
     /// All matchers must match
     AllOf(Vec<Matcher>),
+    /// The predicate must return true
+    Predicate(predicate::MatcherPredicate),
     /// Matches any path or any header value.
     Any,
     /// Checks that a header is not present in the request.
@@ -70,6 +72,15 @@ impl From<&mut File> for Matcher {
 impl From<Vec<u8>> for Matcher {
     fn from(value: Vec<u8>) -> Self {
         Matcher::Binary(BinaryBody::from_bytes(value))
+    }
+}
+
+impl<F> From<F> for Matcher
+where
+    F: Fn(&str) -> bool + Send + Sync + 'static,
+{
+    fn from(value: F) -> Self {
+        Matcher::Predicate(value.into())
     }
 }
 
@@ -103,6 +114,7 @@ impl fmt::Display for Matcher {
             Matcher::AnyOf(x) => format!("({}) (any of)", join_matches(x)),
             Matcher::AllOf(x) => format!("({}) (all of)", join_matches(x)),
             Matcher::Missing => "(missing)".to_string(),
+            Matcher::Predicate(_) => "predicate".to_string(),
         };
         write!(f, "{}", result)
     }
@@ -179,6 +191,7 @@ impl Matcher {
             Matcher::AnyOf(ref matchers) => matchers.iter().any(|m| m.matches_value(other)),
             Matcher::AllOf(ref matchers) => matchers.iter().all(|m| m.matches_value(other)),
             Matcher::Missing => other.is_empty(),
+            Matcher::Predicate(ref predicate) => predicate.matches(other),
         }
     }
 }
@@ -278,6 +291,41 @@ impl fmt::Display for BinaryBody {
             let len: usize = std::cmp::min(self.content.len(), 8);
             let first_bytes: Vec<u8> = self.content.iter().copied().take(len).collect();
             write!(f, "filecontent: {:?}", first_bytes)
+        }
+    }
+}
+
+mod predicate {
+    use std::fmt;
+    use std::sync::Arc;
+
+    #[derive(Clone)]
+    pub struct MatcherPredicate(Arc<dyn Fn(&str) -> bool + Send + Sync>);
+
+    impl PartialEq for MatcherPredicate {
+        fn eq(&self, other: &Self) -> bool {
+            Arc::ptr_eq(&self.0, &other.0)
+        }
+    }
+
+    impl fmt::Debug for MatcherPredicate {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "MatcherPredicate")
+        }
+    }
+
+    impl MatcherPredicate {
+        pub fn matches(&self, value: &str) -> bool {
+            self.0(value)
+        }
+    }
+
+    impl<F> From<F> for MatcherPredicate
+    where
+        F: Fn(&str) -> bool + Send + Sync + 'static,
+    {
+        fn from(value: F) -> Self {
+            Self(Arc::new(value))
         }
     }
 }

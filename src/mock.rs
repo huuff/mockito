@@ -114,6 +114,7 @@ impl fmt::Display for InnerMock {
             Matcher::AnyOf(..) => formatted.push_str("(any of)\r\n"),
             Matcher::AllOf(..) => formatted.push_str("(all of)\r\n"),
             Matcher::Any => {}
+            Matcher::Predicate(_) => formatted.push_str("(predicate)\r\n"),
         }
 
         f.write_str(&formatted)

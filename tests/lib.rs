@@ -1880,6 +1880,17 @@ fn test_anyof_exact_path_and_query_matcher() {
 }
 
 #[test]
+fn test_match_predicate() {
+    let mut s = Server::new();
+    s.mock("POST", "/")
+        .match_body(|body: &str| body.contains("world"))
+        .create();
+
+    let (status, _, _) = request_with_body(s.host_with_port(), "POST /", "", "hello world");
+    assert_eq!("HTTP/1.1 200 OK\r\n", status);
+}
+
+#[test]
 fn test_default_headers() {
     let mut s = Server::new();
     let host = s.host_with_port();
